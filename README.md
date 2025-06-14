@@ -11,7 +11,7 @@ Clone this repository and run Claude Code in the project directory.
 ```bash
 git clone https://github.com/vyluong/claude-code-completion
 cd claude-code-completion
-claude
+claude init
 ```
 Claude Code will automatically read the [CLAUDE.md](./CLAUDE.md) file and set up shell completion for you.
 
