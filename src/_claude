@@ -1,0 +1,288 @@
+#compdef claude
+
+# ZSH completion script for Claude Code CLI
+# Generated from CLAUDE-CODE-CLI-REFERENCE.md
+
+_claude() {
+  local context state line
+  typeset -A opt_args
+
+  # Global options available to all commands
+  local global_options=(
+    '(-d --debug)'{-d,--debug}'[Enable debug mode]'
+    '--verbose[Override verbose mode setting from config]'
+    '(-p --print)'{-p,--print}'[Print response and exit (useful for pipes)]'
+    '--output-format[Output format (only works with --print)]:format:(text json stream-json)'
+    '--input-format[Input format (only works with --print)]:format:(text stream-json)'
+    '--mcp-debug[DEPRECATED: Enable MCP debug mode]'
+    '--dangerously-skip-permissions[Bypass all permission checks]'
+    '--allowedTools[Comma or space-separated list of tool names to allow]:tools:'
+    '--disallowedTools[Comma or space-separated list of tool names to deny]:tools:'
+    '--mcp-config[Load MCP servers from a JSON file or string]:file or string:_files'
+    '(-c --continue)'{-c,--continue}'[Continue the most recent conversation]'
+    '(-r --resume)'{-r,--resume}'[Resume a conversation - provide session ID or select interactively]:session ID:'
+    '--model[Model for the current session]:model:'
+    '--add-dir[Additional directories to allow tool access to]:directories:_directories'
+    '(-v --version)'{-v,--version}'[Output the version number]'
+    '(-h --help)'{-h,--help}'[Display help for command]'
+  )
+
+  _arguments -C \
+    $global_options \
+    '1: :_claude_commands' \
+    '*:: :->args'
+
+  case $state in
+    args)
+      case $words[1] in
+        config)
+          _claude_config
+          ;;
+        mcp)
+          _claude_mcp
+          ;;
+        update|doctor|migrate-installer)
+          # These commands don't have additional arguments
+          ;;
+        *)
+          # Handle direct query as argument
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_claude_commands() {
+  local commands=(
+    'config:Manage configuration (eg. claude config set -g theme dark)'
+    'mcp:Configure and manage MCP servers'
+    'migrate-installer:Migrate from global npm installation to local installation'
+    'doctor:Check the health of your Claude Code auto-updater'
+    'update:Check for updates and install if available'
+  )
+  _describe 'commands' commands
+}
+
+_claude_config() {
+  local config_commands=(
+    'get:Get configuration value'
+    'set:Set configuration value'
+    'remove:Remove configuration values'
+    'list:List all configuration values'
+    'add:Add items to configuration array'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe 'config commands' config_commands
+  elif (( CURRENT >= 3 )); then
+    case $words[2] in
+      get)
+        if (( CURRENT == 3 )); then
+          # Support global flag for get
+          _arguments \
+            '(-g --global)'{-g,--global}'[Use global configuration]' \
+            '1:config key:_claude_config_keys'
+        fi
+        ;;
+      set)
+        if (( CURRENT == 3 )); then
+          # Check for -g flag
+          if [[ $words[3] == "-g" || $words[3] == "--global" ]]; then
+            return
+          else
+            _arguments \
+              '(-g --global)'{-g,--global}'[Use global configuration]' \
+              '1:config key:_claude_config_keys' \
+              '2:value:->set_value'
+          fi
+        elif (( CURRENT == 4 )); then
+          if [[ $words[3] == "-g" || $words[3] == "--global" ]]; then
+            _claude_config_keys
+          else
+            # Provide value completion based on key
+            _claude_config_values $words[3]
+          fi
+        elif (( CURRENT == 5 && ($words[3] == "-g" || $words[3] == "--global") )); then
+          _claude_config_values $words[4]
+        fi
+        ;;
+      remove)
+        if (( CURRENT == 3 )); then
+          _arguments \
+            '(-g --global)'{-g,--global}'[Use global configuration]' \
+            '1:config key:_claude_config_keys'
+        fi
+        ;;
+      add)
+        if (( CURRENT == 3 )); then
+          _arguments \
+            '(-g --global)'{-g,--global}'[Use global configuration]' \
+            '1:config key:_claude_config_keys' \
+            '*:values:'
+        fi
+        ;;
+      list)
+        if (( CURRENT == 3 )); then
+          _arguments \
+            '(-g --global)'{-g,--global}'[Use global configuration]'
+        fi
+        ;;
+    esac
+  fi
+}
+
+_claude_config_keys() {
+  # Project-level config keys (can be set without --global)
+  local project_keys=(
+    'allowedTools:Array of allowed tools'
+    'hasTrustDialogAccepted:Whether trust dialog was accepted'
+    'hasCompletedProjectOnboarding:Whether project onboarding is completed'
+    'ignorePatterns:File patterns to ignore'
+  )
+  
+  # Global config keys (require --global flag to set)
+  local global_keys=(
+    'apiKeyHelper:API key helper configuration'
+    'autoUpdaterStatus:Controls auto-updater (enabled/disabled)'
+    'theme:UI theme (light/dark)'
+    'verbose:Verbose mode setting'
+    'preferredNotifChannel:Notification channel preference'
+    'shiftEnterKeyBindingInstalled:Whether shift+enter key binding is installed'
+    'editorMode:Editor mode setting'
+    'hasUsedBackslashReturn:Whether backslash return has been used'
+    'supervisorMode:Supervisor mode setting'
+    'autoCompactEnabled:Auto-compact feature'
+    'diffTool:Diff tool preference'
+    'env:Environment variables'
+    'tipsHistory:Tips history tracking'
+    'parallelTasksCount:Number of parallel tasks'
+    'todoFeatureEnabled:Todo feature toggle'
+    'messageIdleNotifThresholdMs:Message idle notification threshold'
+  )
+  
+  # Check if we're in a global context (has -g or --global flag)
+  local is_global=false
+  [[ ${words[(i)-g]} -le ${#words} || ${words[(i)--global]} -le ${#words} ]] && is_global=true
+  
+  if [[ "$is_global" == "true" ]]; then
+    _describe 'global configuration keys' global_keys
+  else
+    # For non-global context, show project keys first, then global keys
+    local all_keys=("${project_keys[@]}" "${global_keys[@]}")
+    _describe 'configuration keys' all_keys
+  fi
+}
+
+_claude_config_values() {
+  local key=$1
+  case $key in
+    autoUpdaterStatus)
+      local values=(
+        'enabled:Enable auto-updater'
+        'disabled:Disable auto-updater'
+      )
+      _describe 'auto-updater status' values
+      ;;
+    theme)
+      local themes=(
+        'light:Light theme'
+        'dark:Dark theme'
+      )
+      _describe 'themes' themes
+      ;;
+    verbose|autoCompactEnabled|todoFeatureEnabled|hasTrustDialogAccepted|hasCompletedProjectOnboarding|shiftEnterKeyBindingInstalled|hasUsedBackslashReturn|supervisorMode)
+      local boolean_values=(
+        'true:Enable'
+        'false:Disable'
+      )
+      _describe 'boolean values' boolean_values
+      ;;
+    allowedTools)
+      local tools=(
+        'Bash:Execute bash commands'
+        'Edit:Edit files'
+        'Read:Read files'
+        'Write:Write files'
+        'Glob:File pattern matching'
+        'Grep:Content search'
+        'Task:Task management'
+        'WebFetch:Fetch web content'
+        'WebSearch:Search the web'
+        'LS:List directory contents'
+        'MultiEdit:Multiple file edits'
+        'NotebookRead:Read Jupyter notebooks'
+        'NotebookEdit:Edit Jupyter notebooks'
+        'TodoRead:Read todo list'
+        'TodoWrite:Write todo list'
+      )
+      _describe 'tools' tools
+      ;;
+    preferredNotifChannel|editorMode|diffTool|apiKeyHelper)
+      local values=(
+        'auto:Automatic'
+      )
+      _describe 'values' values
+      ;;
+    parallelTasksCount|messageIdleNotifThresholdMs)
+      _message 'number'
+      ;;
+    ignorePatterns)
+      _message 'file patterns (comma-separated)'
+      ;;
+    env|tipsHistory)
+      _message 'JSON object'
+      ;;
+  esac
+}
+
+_claude_mcp() {
+  local mcp_commands=(
+    'serve:Start Claude Code MCP server'
+    'add:Add MCP server'
+    'remove:Remove MCP server'
+    'list:List configured MCP servers'
+    'get:Get MCP server details'
+    'add-json:Add server with JSON string'
+    'add-from-claude-desktop:Import from Claude Desktop'
+    'reset-project-choices:Reset approved/rejected project servers'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe 'mcp commands' mcp_commands
+  elif (( CURRENT >= 3 )); then
+    case $words[2] in
+      serve|list|add-from-claude-desktop|reset-project-choices)
+        # No additional arguments
+        ;;
+      add)
+        if (( CURRENT == 3 )); then
+          # Server name
+          _message 'server name'
+        elif (( CURRENT == 4 )); then
+          # Command or URL
+          _message 'command or URL'
+        else
+          # Additional arguments
+          _message 'additional arguments'
+        fi
+        ;;
+      remove|get)
+        if (( CURRENT == 3 )); then
+          # Server name - could be enhanced to list actual configured servers
+          _message 'server name'
+        fi
+        ;;
+      add-json)
+        if (( CURRENT == 3 )); then
+          _message 'server name'
+        elif (( CURRENT == 4 )); then
+          _message 'JSON configuration'
+        fi
+        ;;
+    esac
+  fi
+}
+
+
+# Main completion function
+_claude "$@"
