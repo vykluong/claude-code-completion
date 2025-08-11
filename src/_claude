@@ -282,7 +282,3 @@ _claude_mcp() {
     esac
   fi
 }
-
-
-# Main completion function
-_claude "$@"
