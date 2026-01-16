@@ -7,7 +7,7 @@ A Zsh shell completion script for [Claude Code](https://docs.anthropic.com/en/do
 Clone this repository and run Claude Code in the project directory.
 
 ```bash
-git clone https://github.com/vyluong/claude-code-completion
+git clone https://github.com/vykluong/claude-code-completion.git
 cd claude-code-completion
 claude init
 ```
