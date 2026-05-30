@@ -70,14 +70,19 @@ _claude_mcp_servers() {
   local -a servers
   local f
   for f in ./.mcp.json "$HOME/.claude.json"; do
-    [[ -r "$f" ]] || continue
+    # Regular files only: a FIFO/socket at ./.mcp.json would block jq (and the
+    # shell) forever on every TAB. -f is false for non-regular files.
+    [[ -f "$f" && -r "$f" ]] || continue
     servers+=( ${(f)"$(jq -r '
         (.mcpServers // {} | keys[]),
         (.projects[]? .mcpServers // {} | keys[])
       ' "$f" 2>/dev/null)"} )
   done
   (( ${#servers} )) || return 1
-  _describe -t mcp-servers 'MCP server' servers
+  local expl
+  # Use compadd (not _describe) so a server name containing ':' is offered
+  # whole instead of being split into value:description and truncated.
+  _wanted mcp-servers expl 'MCP server' compadd -a servers
 }
 
 # Local git refs, used to complete `ultrareview` base-branch targets.
@@ -174,7 +179,7 @@ _claude_auth() {
         login)
           _arguments -s \
             '--claudeai[Use Claude subscription (default)]' \
-            '--console[Use Anthropic Console (API usage billing)]' \
+            '--console[Use Anthropic Console (API usage billing) instead of Claude subscription]' \
             '--email[Pre-populate email address on the login page]:email:' \
             '--sso[Force SSO login flow]' \
             '(-h --help)'{-h,--help}'[Display help for command]' && ret=0
@@ -264,8 +269,8 @@ _claude_mcp() {
             '--callback-port[Fixed port for OAuth callback]:port:' \
             '--client-id[OAuth client ID for HTTP/SSE servers]:client id:' \
             '--client-secret[Prompt for OAuth client secret]' \
-            '*'{-e,--env}'[Set an environment variable (KEY=value)]:env:' \
-            '*'{-H,--header}'[Set a header (e.g. X-Api-Key: abc123)]:header:' \
+            '*'{-e,--env}'[Set environment variables, e.g. KEY=value]:env:' \
+            '*'{-H,--header}'[Set WebSocket headers (repeatable)]:header:' \
             '(-s --scope)'{-s,--scope}'[Configuration scope]:scope:(local user project)' \
             '(-t --transport)'{-t,--transport}'[Transport type]:transport:(stdio sse http)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
@@ -368,7 +373,7 @@ _claude_plugin() {
             '--author-email[Author email]:email:' \
             '--description[Manifest description]:text:' \
             '(-f --force)'{-f,--force}'[Overwrite an existing .claude-plugin at the target]' \
-            '--with[Also scaffold components]:component:(skills agents hooks mcp lsp output-style channel)' \
+            '*--with[Also scaffold components]:component:(skills agents hooks mcp lsp output-style channel)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
             '1:plugin name:' && ret=0
           ;;
@@ -424,7 +429,7 @@ _claude_plugin() {
           _arguments -s \
             '--strict[Treat warnings as errors (exit 1)]' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:path:_directories' && ret=0
+            '1:path:_files' && ret=0
           ;;
       esac
       ;;
@@ -503,12 +508,12 @@ _claude_project() {
       case $line[1] in
         purge)
           _arguments -s \
-            '--all[Purge state for every project (mutually exclusive with path)]' \
+            '(1)--all[Purge state for every project (mutually exclusive with path)]' \
             '--dry-run[List what would be deleted without deleting anything]' \
             '(-i --interactive)'{-i,--interactive}'[Prompt for each item before deleting]' \
             '(-y --yes)'{-y,--yes}'[Skip confirmation prompt]' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:path:_directories' && ret=0
+            '(--all)1:path:_directories' && ret=0
           ;;
       esac
       ;;
@@ -583,25 +588,34 @@ _claude_import_conversations() {
 # free-form (run `claude agents --json` to list live sessions).
 
 _claude_attach() {
-  _arguments '1:session id:'
+  _arguments \
+    '(-h --help)'{-h,--help}'[Display help for command]' \
+    '1:session id:'
 }
 
 _claude_logs() {
-  _arguments '1:session id:'
+  _arguments \
+    '(-h --help)'{-h,--help}'[Display help for command]' \
+    '1:session id:'
 }
 
 _claude_rm() {
-  _arguments '1:session id:'
+  _arguments \
+    '(-h --help)'{-h,--help}'[Display help for command]' \
+    '1:session id:'
 }
 
 _claude_stop() {
-  _arguments '1:session id:'
+  _arguments \
+    '(-h --help)'{-h,--help}'[Display help for command]' \
+    '1:session id:'
 }
 
 _claude_respawn() {
   _arguments -s \
-    '--all[Restart every running background session]' \
-    '1:session id:'
+    '(-h --help 1)--all[Restart every running background session]' \
+    '(-h --help)'{-h,--help}'[Display help for command]' \
+    '(--all)1:session id:'
 }
 
 _claude_daemon() {
@@ -627,7 +641,7 @@ _claude_daemon() {
     args)
       case $line[1] in
         run)
-          _arguments '1:json-path:_files' && ret=0
+          _arguments '1::json-path:_files' && ret=0
           ;;
         stop)
           _arguments -s \
@@ -653,7 +667,7 @@ _claude() {
     '--agent[Agent for the current session]:agent:'
     '--agents[JSON object defining custom agents]:json:'
     '--allow-dangerously-skip-permissions[Enable bypassing all permission checks as an option]'
-    '(--allowedTools --allowed-tools)'{--allowedTools,--allowed-tools}'[Comma or space-separated tools to allow]:tool:_claude_tools'
+    '*'{--allowedTools,--allowed-tools}'[Comma or space-separated tools to allow]:tool:_claude_tools'
     '--append-system-prompt[Append a system prompt to the default system prompt]:prompt:'
     '--append-system-prompt-file[Append a system prompt read from a file]:file:_files'
     '--bare[Minimal mode: skip hooks, LSP, plugin sync, auto-memory, and CLAUDE.md discovery]'
@@ -666,7 +680,7 @@ _claude() {
     '(-d --debug)'{-d,--debug}'[Enable debug mode with optional category filtering]::filter:'
     '--debug-file[Write debug logs to a specific file path]:path:_files'
     '--disable-slash-commands[Disable all skills]'
-    '(--disallowedTools --disallowed-tools)'{--disallowedTools,--disallowed-tools}'[Comma or space-separated tools to deny]:tool:_claude_tools'
+    '*'{--disallowedTools,--disallowed-tools}'[Comma or space-separated tools to deny]:tool:_claude_tools'
     '--effort[Effort level for the current session]:level:(low medium high xhigh max)'
     '--exclude-dynamic-system-prompt-sections[Move per-machine sections into the first user message]'
     '--fallback-model[Fallback model when the default is overloaded (only with --print)]:model:_claude_models'
@@ -701,7 +715,7 @@ _claude() {
     '--system-prompt[System prompt to use for the session]:prompt:'
     '--system-prompt-file[System prompt to use, read from a file]:file:_files'
     '--tmux[Create a tmux session for the worktree (requires --worktree)]'
-    '--tools[Available tools from the built-in set]:tool:_claude_tools'
+    '*--tools[Available tools from the built-in set]:tool:_claude_tools'
     '--verbose[Override verbose mode setting from config]'
     '(-w --worktree)'{-w,--worktree}'[Create a new git worktree for this session]::name:'
     # Documented in the official CLI reference but hidden from `claude --help`
@@ -722,9 +736,26 @@ _claude() {
     '(-v --version)'{-v,--version}'[Output the version number]'
   )
 
+  # Options that take an OPTIONAL value (`::` specs) greedily swallow the next
+  # word as their value (e.g. `claude --worktree mcp` names the worktree "mcp",
+  # it does not run `mcp`). Offering the command list right after such a flag
+  # would suggest subcommands the parser can never dispatch, so suppress it
+  # there. Typing an option (PREFIX starts with `-`) is unaffected, and once a
+  # value has been supplied the command list returns on the next word.
+  local cmd_arg='1: :_claude_commands'
+  local -a optval_flags
+  optval_flags=(
+    -d --debug --from-pr --prompt-suggestions --remote-control --rc
+    -r --resume -w --worktree --remote --teleport
+  )
+  if (( CURRENT > 1 )) && [[ $PREFIX != -* ]] \
+     && (( ${optval_flags[(I)$words[CURRENT-1]]} )); then
+    cmd_arg='1: :'
+  fi
+
   _arguments -C \
     $global_options \
-    '1: :_claude_commands' \
+    "$cmd_arg" \
     '*::arg:->args' && ret=0
 
   if [[ $state == args ]]; then
