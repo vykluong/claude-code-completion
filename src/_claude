@@ -16,10 +16,11 @@
 # `$words` at each level, so every `_claude_<cmd>` function sees its own
 # subcommand as `$words[1]` and its positionals start at spec index `1`.
 #
-# Hidden commands (remote-control/rc, import-conversations) and command aliases
-# (plugins, upgrade) are real and invokable but, to mirror the binary's own
-# `--help` (which omits them), they are only offered once a matching prefix has
-# been typed — `claude <TAB>` lists just the documented commands.
+# Commands the binary hides from its own `--help` (remote-control/rc,
+# import-conversations, daemon, and the background-session commands
+# attach/logs/respawn/rm/stop/kill) and command aliases (plugins, upgrade) are
+# real and invokable, so the completion lists them too: `claude <TAB>` offers
+# EVERY command, not just the documented subset.
 # ------------------------------------------------------------------------------
 
 # ---- value helpers -----------------------------------------------------------
@@ -96,7 +97,7 @@ _claude_git_refs() {
 # ---- top-level command list --------------------------------------------------
 
 _claude_commands() {
-  local -a cmds
+  local -a cmds aliases
   cmds=(
     'agents:Manage background agents'
     'auth:Manage authentication'
@@ -109,30 +110,28 @@ _claude_commands() {
     'setup-token:Set up a long-lived authentication token'
     'ultrareview:Run a cloud-hosted multi-agent code review'
     'update:Check for updates and install if available'
+    # Real, fully-invokable commands that the binary hides from its own
+    # `--help`. They are listed unconditionally so `claude <TAB>` shows every
+    # command — not just the documented subset. (All verified present in the
+    # 2.1.158 binary.)
+    'remote-control:Control local sessions from claude.ai/code or the Claude mobile app'
+    'import-conversations:Import conversations from an export path'
+    'daemon:Inspect/manage the background-session supervisor'
+    'attach:Open a background session in this terminal'
+    'logs:Print a background session recent output'
+    'respawn:Restart a background session so it picks up the current binary'
+    'rm:Delete a background session and its worktree'
+    'stop:Stop a background session (alias: kill)'
+  )
+  # Command aliases — also shown unconditionally, in their own group.
+  aliases=(
+    'plugins:Manage Claude Code plugins (alias of plugin)'
+    'upgrade:Check for updates and install (alias of update)'
+    'rc:Control local sessions (alias of remote-control)'
+    'kill:Stop a background session (alias of stop)'
   )
   _describe -t commands 'claude command' cmds
-
-  # Aliases and commands documented in the CLI reference but omitted from
-  # `claude --help`: only offered once the user has started typing, so bare
-  # `claude <TAB>` mirrors --help. (All verified present in the 2.1.158 binary.)
-  if [[ -n "$PREFIX$SUFFIX" ]]; then
-    local -a extra
-    extra=(
-      'plugins:Manage Claude Code plugins (alias of plugin)'
-      'upgrade:Check for updates and install (alias of update)'
-      'remote-control:Control local sessions from claude.ai/code or the Claude mobile app'
-      'rc:Control local sessions (alias of remote-control)'
-      'import-conversations:Import conversations from an export path'
-      'attach:Open a background session in this terminal'
-      'daemon:Inspect/manage the background-session supervisor'
-      'logs:Print a background session recent output'
-      'respawn:Restart a background session so it picks up the current binary'
-      'rm:Delete a background session and its worktree'
-      'stop:Stop a background session (alias: kill)'
-      'kill:Stop a background session (alias of stop)'
-    )
-    _describe -t hidden-commands 'alias or background-session command' extra
-  fi
+  _describe -t command-aliases 'command alias' aliases
 }
 
 # ---- agents ------------------------------------------------------------------
