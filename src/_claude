@@ -56,29 +56,234 @@ _claude_models() {
 _claude_tools() {
   local -a tools
   tools=(
-    'Task' 'Bash' 'Glob' 'Grep' 'Read' 'Edit' 'Write'
-    'NotebookEdit' 'NotebookRead' 'WebFetch' 'WebSearch' 'TodoWrite'
-    'ExitPlanMode' 'KillShell' 'Agent' 'Skill' 'SendUserMessage'
+    'Task[Task management]'
+    'Bash[Run bash commands]'
+    'Glob[File globbing]'
+    'Grep[Search within files]'
+    'Read[Read file content]'
+    'Edit[Edit file content]'
+    'Write[Write file content]'
+    'NotebookEdit[Edit Jupyter Notebooks]'
+    'NotebookRead[Read Jupyter Notebooks]'
+    'WebFetch[Fetch web content]'
+    'WebSearch[Search the web]'
+    'TodoWrite[Manage TODOs]'
+    'ExitPlanMode[Exit plan mode]'
+    'KillShell[Kill shell sessions]'
+    'Agent[Invoke background agents]'
+    'Skill[Manage skills]'
+    'SendUserMessage[Send messages to user]'
   )
-  _describe -t tools 'tool name' tools
+  _values -s , 'tool name' $tools
 }
 
+_claude_tools_with_default() {
+  local -a tools
+  tools=(
+    'Task[Task management]'
+    'Bash[Run bash commands]'
+    'Glob[File globbing]'
+    'Grep[Search within files]'
+    'Read[Read file content]'
+    'Edit[Edit file content]'
+    'Write[Write file content]'
+    'NotebookEdit[Edit Jupyter Notebooks]'
+    'NotebookRead[Read Jupyter Notebooks]'
+    'WebFetch[Fetch web content]'
+    'WebSearch[Search the web]'
+    'TodoWrite[Manage TODOs]'
+    'ExitPlanMode[Exit plan mode]'
+    'KillShell[Kill shell sessions]'
+    'Agent[Invoke background agents]'
+    'Skill[Manage skills]'
+    'SendUserMessage[Send messages to user]'
+    'default[Use all default tools]'
+  )
+  _values -s , 'tool name' $tools
+}
+
+# ---- JSON Parser Helper ------------------------------------------------------
+# A multi-tiered JSON parser that uses jq if available, and falls back to
+# python3/python or node. This ensures completions work without jq.
+# Bypasses PATH searches by calling absolute paths from $commands, and
+# ensures binaries are absolute paths.
+# Usage: _claude_json_parser <type> [args...]
+_claude_json_parser() {
+  local type=$1
+  shift
+  if (( $+commands[jq] )) && [[ "$commands[jq]" == /* ]]; then
+    case $type in
+      mcp)
+        local project_dir=$1
+        shift
+        "$commands[jq]" -r --arg proj "$project_dir" '
+          (.mcpServers // {} | keys[]),
+          (.projects[$proj].mcpServers // {} | keys[])
+        ' "$@" 2>/dev/null
+        ;;
+      plugins)
+        "$commands[jq]" -r '.plugins | keys[] | ., sub("@.*$"; "")' "$@" 2>/dev/null
+        ;;
+      catalog)
+        "$commands[jq]" -r '.catalog.plugins | keys[] | ., sub("@.*$"; "")' "$@" 2>/dev/null
+        ;;
+      marketplaces)
+        "$commands[jq]" -r 'keys[]' "$@" 2>/dev/null
+        ;;
+      sessions)
+        "$commands[jq]" -r -s '.[] | select(.kind == "bg") | "\(.sessionId):\(.name // .sessionId) (\(.status))"' "$@" 2>/dev/null
+        ;;
+    esac
+    return 0
+  fi
+
+  local py_cmd
+  if (( $+commands[python3] )) && [[ "$commands[python3]" == /* ]]; then
+    py_cmd="$commands[python3]"
+  elif (( $+commands[python] )) && [[ "$commands[python]" == /* ]]; then
+    py_cmd="$commands[python]"
+  fi
+
+  if [[ -n "$py_cmd" ]]; then
+    "$py_cmd" -c '
+import json, sys
+type_arg = sys.argv[1]
+if type_arg == "mcp":
+    proj = sys.argv[2]
+    files = sys.argv[3:]
+    for f in files:
+        try:
+            with open(f) as fp:
+                d = json.load(fp)
+                for k in d.get("mcpServers", {}).keys():
+                    print(k)
+                for k in d.get("projects", {}).get(proj, {}).get("mcpServers", {}).keys():
+                    print(k)
+        except Exception: pass
+elif type_arg in ("plugins", "catalog"):
+    files = sys.argv[2:]
+    for f in files:
+        try:
+            with open(f) as fp:
+                d = json.load(fp)
+                plugins = d.get("catalog", {}).get("plugins", {}) if type_arg == "catalog" else d.get("plugins", {})
+                for k in plugins.keys():
+                    print(k)
+                    if "@" in k:
+                        print(k.split("@")[0])
+        except Exception: pass
+elif type_arg == "marketplaces":
+    files = sys.argv[2:]
+    for f in files:
+        try:
+            with open(f) as fp:
+                d = json.load(fp)
+                for k in d.keys():
+                    print(k)
+        except Exception: pass
+elif type_arg == "sessions":
+    files = sys.argv[2:]
+    for f in files:
+        try:
+            with open(f) as fp:
+                d = json.load(fp)
+                if d.get("kind") == "bg":
+                    sid = d.get("sessionId")
+                    name = d.get("name")
+                    status = d.get("status", "")
+                    desc_name = name if name else sid
+                    print(f"{sid}:{desc_name} ({status})")
+        except Exception: pass
+' "$type" "$@" 2>/dev/null
+    return 0
+  fi
+
+  if (( $+commands[node] )) && [[ "$commands[node]" == /* ]]; then
+    "$commands[node]" -e '
+const type = process.argv[1];
+const fs = require("fs");
+if (type === "mcp") {
+  const proj = process.argv[2];
+  const files = process.argv.slice(3);
+  files.forEach(f => {
+    try {
+      const d = JSON.parse(fs.readFileSync(f, "utf8"));
+      Object.keys(d.mcpServers || {}).forEach(k => console.log(k));
+      if (d.projects && d.projects[proj]) {
+        Object.keys(d.projects[proj].mcpServers || {}).forEach(k => console.log(k));
+      }
+    } catch(e) {}
+  });
+} else if (type === "plugins" || type === "catalog") {
+  const files = process.argv.slice(2);
+  files.forEach(f => {
+    try {
+      const d = JSON.parse(fs.readFileSync(f, "utf8"));
+      const plugins = type === "catalog" ? (d.catalog || {}).plugins || {} : d.plugins || {};
+      Object.keys(plugins).forEach(k => {
+        console.log(k);
+        if (k.includes("@")) console.log(k.split("@")[0]);
+      });
+    } catch(e) {}
+  });
+} else if (type === "marketplaces") {
+  const files = process.argv.slice(2);
+  files.forEach(f => {
+    try {
+      const d = JSON.parse(fs.readFileSync(f, "utf8"));
+      Object.keys(d).forEach(k => console.log(k));
+    } catch(e) {}
+  });
+} else if (type === "sessions") {
+  const files = process.argv.slice(2);
+  files.forEach(f => {
+    try {
+      const d = JSON.parse(fs.readFileSync(f, "utf8"));
+      if (d.kind === "bg") {
+        const sid = d.sessionId;
+        const name = d.name;
+        const status = d.status || "";
+        const descName = name || sid;
+        console.log(`${sid}:${descName} (${status})`);
+      }
+    } catch(e) {}
+  });
+}
+' "$type" "$@" 2>/dev/null
+    return 0
+  fi
+
+  return 1
+}
+
+# ---- value helpers -----------------------------------------------------------
+
 # Best-effort: configured MCP server names, read from local config without
-# invoking the binary (which would run slow health checks). Requires `jq`;
-# silently offers nothing if jq is unavailable or no config is found.
+# invoking the binary (which would run slow health checks).
 _claude_mcp_servers() {
-  (( $+commands[jq] )) || return 1
+  local claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local project_dir="$PWD"
+  if (( $+commands[git] )) && [[ "$commands[git]" == /* ]]; then
+    local git_root
+    git_root=$("$commands[git]" rev-parse --show-toplevel 2>/dev/null)
+    if [[ -n "$git_root" ]]; then
+      project_dir="$git_root"
+    fi
+  fi
+
   local -a servers
-  local f
-  for f in ./.mcp.json "$HOME/.claude.json"; do
-    # Regular files only: a FIFO/socket at ./.mcp.json would block jq (and the
-    # shell) forever on every TAB. -f is false for non-regular files.
+  local f files=()
+  for f in "$project_dir/.mcp.json" "${claude_dir}.json" "$HOME/.claude.json" "${claude_dir}/.claude.json"; do
     [[ -f "$f" && -r "$f" ]] || continue
-    servers+=( ${(f)"$(jq -r '
-        (.mcpServers // {} | keys[]),
-        (.projects[]? .mcpServers // {} | keys[])
-      ' "$f" 2>/dev/null)"} )
+    # Security: prevent symlink traversal for project-local configurations to avoid key leakage attacks
+    if [[ "$f" == "$project_dir/.mcp.json" && -L "$f" ]]; then
+      continue
+    fi
+    files+=( "$f" )
   done
+  if (( ${#files} )); then
+    servers+=( ${(f)"$(_claude_json_parser mcp "$project_dir" "${files[@]}")"} )
+  fi
   (( ${#servers} )) || return 1
   local expl
   # Use compadd (not _describe) so a server name containing ':' is offered
@@ -88,10 +293,96 @@ _claude_mcp_servers() {
 
 # Local git refs, used to complete `ultrareview` base-branch targets.
 _claude_git_refs() {
+  (( $+commands[git] )) && [[ "$commands[git]" == /* ]] || return 1
   local -a refs
-  refs=( ${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null)"} )
+  refs=( ${(f)"$("$commands[git]" for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>/dev/null)"} )
   (( ${#refs} )) || return 1
   _describe -t git-refs 'git ref' refs
+}
+
+# Installed plugin names/IDs, read from local config.
+_claude_plugins() {
+  local claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local -a plugins
+  local f files=()
+  for f in ./.claude/plugins/installed_plugins.json "$claude_dir/plugins/installed_plugins.json"; do
+    [[ -f "$f" && -r "$f" ]] || continue
+    # Security: prevent symlink traversal for project-local configurations to avoid key leakage attacks
+    if [[ "$f" == ./.claude/* && -L "$f" ]]; then
+      continue
+    fi
+    files+=( "$f" )
+  done
+  if (( ${#files} )); then
+    plugins+=( ${(f)"$(_claude_json_parser plugins "${files[@]}")"} )
+  fi
+  (( ${#plugins} )) || return 1
+  _wanted installed-plugins expl 'plugin' compadd -a plugins
+}
+
+# Available plugin names/IDs from marketplace catalog cache.
+_claude_available_plugins() {
+  local claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local -a plugins
+  local f files=()
+  for f in ./.claude/plugins/plugin-catalog-cache.json "$claude_dir/plugins/plugin-catalog-cache.json"; do
+    [[ -f "$f" && -r "$f" ]] || continue
+    # Security: prevent symlink traversal for project-local configurations to avoid key leakage attacks
+    if [[ "$f" == ./.claude/* && -L "$f" ]]; then
+      continue
+    fi
+    files+=( "$f" )
+  done
+  if (( ${#files} )); then
+    plugins+=( ${(f)"$(_claude_json_parser catalog "${files[@]}")"} )
+  fi
+  (( ${#plugins} )) || return 1
+  _wanted available-plugins expl 'plugin' compadd -a plugins
+}
+
+# Configured marketplace names, read from local config.
+_claude_marketplaces() {
+  local claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local -a mps
+  local f files=()
+  for f in ./.claude/plugins/known_marketplaces.json "$claude_dir/plugins/known_marketplaces.json"; do
+    [[ -f "$f" && -r "$f" ]] || continue
+    # Security: prevent symlink traversal for project-local configurations to avoid key leakage attacks
+    if [[ "$f" == ./.claude/* && -L "$f" ]]; then
+      continue
+    fi
+    files+=( "$f" )
+  done
+  if (( ${#files} )); then
+    mps+=( ${(f)"$(_claude_json_parser marketplaces "${files[@]}")"} )
+  fi
+  (( ${#mps} )) || return 1
+  _wanted marketplaces expl 'marketplace' compadd -a mps
+}
+
+# Git remotes.
+_claude_git_remotes() {
+  (( $+commands[git] )) && [[ "$commands[git]" == /* ]] || return 1
+  local -a remotes
+  remotes=( ${(f)"$("$commands[git]" remote 2>/dev/null)"} )
+  (( ${#remotes} )) || return 1
+  _describe -t remotes 'remote' remotes
+}
+
+# Active background session IDs/names, parsed directly from local session configurations.
+_claude_sessions() {
+  local claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local -a sessions
+  local -a files safe_files=()
+  files=( "$claude_dir"/sessions/*.json(N) )
+  for f in "${files[@]}"; do
+    [[ ! -L "$f" ]] && safe_files+=( "$f" )
+  done
+  if (( ${#safe_files} )); then
+    sessions+=( ${(f)"$(_claude_json_parser sessions "${safe_files[@]}")"} )
+  fi
+  (( ${#sessions} )) || return 1
+  _describe -t sessions 'background session' sessions
 }
 
 # ---- top-level command list --------------------------------------------------
@@ -149,7 +440,7 @@ _claude_agents() {
     '--model[Default model for dispatched sessions]:model:_claude_models' \
     '--permission-mode[Default permission mode for dispatched sessions]:mode:(acceptEdits auto bypassPermissions default dontAsk plan)' \
     '*--plugin-dir[Load plugins from a directory for the agent view]:path:_directories' \
-    '--setting-sources[Comma-separated setting sources to load]:sources:' \
+    '--setting-sources[Comma-separated setting sources to load]:sources:_values -s , "setting source" user project local' \
     '--settings[Settings file or JSON string for the agent view]:file or json:_files' \
     '--strict-mcp-config[Only use MCP servers from --mcp-config in dispatched sessions]' \
     '(-h --help)'{-h,--help}'[Display help for command]'
@@ -351,20 +642,20 @@ _claude_plugin() {
       case $line[1] in
         details)
           _arguments '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:plugin name:' && ret=0
+            '1:plugin name:_claude_plugins' && ret=0
           ;;
         disable)
           _arguments -s \
             '(-a --all)'{-a,--all}'[Disable all enabled plugins]' \
             '(-s --scope)'{-s,--scope}'[Installation scope]:scope:(user project local)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:plugin:' && ret=0
+            '1::plugin:_claude_plugins' && ret=0
           ;;
         enable)
           _arguments -s \
             '(-s --scope)'{-s,--scope}'[Installation scope]:scope:(user project local)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:plugin:' && ret=0
+            '1:plugin:_claude_plugins' && ret=0
           ;;
         init|new)
           _arguments -s \
@@ -372,7 +663,7 @@ _claude_plugin() {
             '--author-email[Author email]:email:' \
             '--description[Manifest description]:text:' \
             '(-f --force)'{-f,--force}'[Overwrite an existing .claude-plugin at the target]' \
-            '*--with[Also scaffold components]:component:(skills agents hooks mcp lsp output-style channel)' \
+            '*--with[Also scaffold components]:component:_values -s , component skills agents hooks mcp lsp output-style channel' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
             '1:plugin name:' && ret=0
           ;;
@@ -381,7 +672,7 @@ _claude_plugin() {
             '*--config[Set a userConfig option (key=value)]:key=value:' \
             '(-s --scope)'{-s,--scope}'[Installation scope]:scope:(user project local)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:plugin (use plugin@marketplace):' && ret=0
+            '1:plugin (use plugin@marketplace):_claude_available_plugins' && ret=0
           ;;
         list)
           _arguments -s \
@@ -405,7 +696,7 @@ _claude_plugin() {
             '(-f --force)'{-f,--force}'[Skip dirty-tree and tag-exists checks]' \
             '(-m --message)'{-m,--message}'[Tag annotation message (use %s for the version)]:message:' \
             '--push[Push the tag to --remote after creating it]' \
-            '--remote[Remote to push to with --push]:remote:' \
+            '--remote[Remote to push to with --push]:remote:_claude_git_remotes' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
             '1:path:_directories' && ret=0
           ;;
@@ -416,13 +707,13 @@ _claude_plugin() {
             '(-s --scope)'{-s,--scope}'[Scope to uninstall from]:scope:(user project local)' \
             '(-y --yes)'{-y,--yes}'[Skip the --prune confirmation prompt]' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:plugin:' && ret=0
+            '1:plugin:_claude_plugins' && ret=0
           ;;
         update)
           _arguments -s \
             '(-s --scope)'{-s,--scope}'[Installation scope]:scope:(user project local managed)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:plugin:' && ret=0
+            '1:plugin:_claude_plugins' && ret=0
           ;;
         validate)
           _arguments -s \
@@ -476,12 +767,12 @@ _claude_plugin_marketplace() {
           _arguments -s \
             '--scope[Settings scope to remove the declaration from]:scope:(user project local)' \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:marketplace name:' && ret=0
+            '1:marketplace name:_claude_marketplaces' && ret=0
           ;;
         update)
           _arguments \
             '(-h --help)'{-h,--help}'[Display help for command]' \
-            '1:marketplace name:' && ret=0
+            '1::marketplace name:_claude_marketplaces' && ret=0
           ;;
       esac
       ;;
@@ -526,7 +817,7 @@ _claude_install() {
   _arguments -s \
     '--force[Force installation even if already installed]' \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '1:target (stable, latest, or a version):(stable latest)'
+    '1::target (stable, latest, or a version):(stable latest)'
 }
 
 # ---- ultrareview -------------------------------------------------------------
@@ -536,7 +827,7 @@ _claude_ultrareview() {
     '--json[Print the raw bugs.json payload instead of formatted findings]' \
     '--timeout[Maximum minutes to wait for the review to finish]:minutes:' \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '1:target (PR number or base branch):_claude_git_refs'
+    '1::target (PR number or base branch):_claude_git_refs'
 }
 
 # ---- update / upgrade --------------------------------------------------------
@@ -583,45 +874,44 @@ _claude_import_conversations() {
 
 # ---- background-session commands (documented; hidden from --help) ------------
 # attach/logs/respawn/rm/stop operate on background sessions by id. Session ids
-# are dynamic and have no local config file to parse cheaply, so the id is left
-# free-form (run `claude agents --json` to list live sessions).
+# are completed dynamically from local session files under ~/.claude/sessions/.
 
 _claude_attach() {
   _arguments \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '1:session id:'
+    '1:session id:_claude_sessions'
 }
 
 _claude_logs() {
   _arguments \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '1:session id:'
+    '1:session id:_claude_sessions'
 }
 
 _claude_rm() {
   _arguments \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '1:session id:'
+    '1:session id:_claude_sessions'
 }
 
 _claude_stop() {
   _arguments \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '1:session id:'
+    '1:session id:_claude_sessions'
 }
 
 _claude_respawn() {
   _arguments -s \
     '(-h --help 1)--all[Restart every running background session]' \
     '(-h --help)'{-h,--help}'[Display help for command]' \
-    '(--all)1:session id:'
+    '(--all)1:session id:_claude_sessions'
 }
 
 _claude_daemon() {
   local curcontext="$curcontext" state line ret=1
   _arguments -C \
-    '--json-path[Config file (default ~/.claude/daemon.json)]:file:_files' \
-    '--log-file[Log file (default ~/.claude/daemon.log)]:file:_files' \
+    "--json-path[Config file (default ${CLAUDE_CONFIG_DIR:-~/.claude}/daemon.json)]:file:_files" \
+    "--log-file[Log file (default ${CLAUDE_CONFIG_DIR:-~/.claude}/daemon.log)]:file:_files" \
     '(-h --help)'{-h,--help}'[Show help]' \
     '1: :->cmds' \
     '*::arg:->args' && ret=0
@@ -640,12 +930,19 @@ _claude_daemon() {
     args)
       case $line[1] in
         run)
-          _arguments '1::json-path:_files' && ret=0
+          _arguments -s \
+            '(-h --help)'{-h,--help}'[Display help for command]' \
+            '1::json-path:_files' && ret=0
           ;;
         stop)
           _arguments -s \
             '--any[Also stop a transient (non-service) daemon]' \
-            '--keep-workers[Leave detached sessions running]' && ret=0
+            '--keep-workers[Leave detached sessions running]' \
+            '(-h --help)'{-h,--help}'[Display help for command]' && ret=0
+          ;;
+        status|logs|uninstall)
+          _arguments -s \
+            '(-h --help)'{-h,--help}'[Display help for command]' && ret=0
           ;;
       esac
       ;;
@@ -655,8 +952,7 @@ _claude_daemon() {
 
 # ---- main entry --------------------------------------------------------------
 
-_claude() {
-  local curcontext="$curcontext" state line ret=1
+local curcontext="$curcontext" state line ret=1
   typeset -A opt_args
 
   # Global options accepted by the bare `claude` invocation (interactive / -p).
@@ -708,13 +1004,13 @@ _claude() {
     '--replay-user-messages[Re-emit user messages from stdin back on stdout]'
     '(-r --resume)'{-r,--resume}'[Resume a conversation by session ID, or open the picker]::session:'
     '--session-id[Use a specific session ID (must be a valid UUID)]:uuid:'
-    '--setting-sources[Comma-separated setting sources to load (user, project, local)]:sources:'
+    '--setting-sources[Comma-separated setting sources to load (user, project, local)]:sources:_values -s , "setting source" user project local'
     '--settings[Path to a settings JSON file or a JSON string]:file or json:_files'
     '--strict-mcp-config[Only use MCP servers from --mcp-config]'
     '--system-prompt[System prompt to use for the session]:prompt:'
     '--system-prompt-file[System prompt to use, read from a file]:file:_files'
     '--tmux[Create a tmux session for the worktree (requires --worktree)]'
-    '*--tools[Available tools from the built-in set]:tool:_claude_tools'
+    '*--tools[Available tools from the built-in set]:tool:_claude_tools_with_default'
     '--verbose[Override verbose mode setting from config]'
     '(-w --worktree)'{-w,--worktree}'[Create a new git worktree for this session]::name:'
     # Documented in the official CLI reference but hidden from `claude --help`
@@ -783,6 +1079,3 @@ _claude() {
   fi
 
   return ret
-}
-
-_claude "$@"
