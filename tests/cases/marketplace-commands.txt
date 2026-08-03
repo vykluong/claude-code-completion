@@ -1,0 +1,7 @@
+buffer='claude plugin marketplace '
+add
+help
+list
+remove
+rm
+update

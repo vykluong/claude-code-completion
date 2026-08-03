@@ -1,0 +1,4 @@
+buffer='claude remote-control --spawn '
+same-dir
+session
+worktree

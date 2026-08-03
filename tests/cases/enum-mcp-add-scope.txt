@@ -1,0 +1,4 @@
+buffer='claude mcp add --scope '
+local
+project
+user

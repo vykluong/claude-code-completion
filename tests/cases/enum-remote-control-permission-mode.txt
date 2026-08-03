@@ -1,0 +1,7 @@
+buffer='claude remote-control --permission-mode '
+acceptEdits
+auto
+bypassPermissions
+default
+dontAsk
+plan

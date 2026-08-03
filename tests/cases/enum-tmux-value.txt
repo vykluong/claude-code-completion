@@ -1,0 +1,2 @@
+buffer='claude --tmux='
+classic

@@ -1,0 +1,7 @@
+buffer='claude daemon stop -'
+--any
+--help
+--json-path
+--keep-workers
+--log-file
+-h

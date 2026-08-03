@@ -1,0 +1,18 @@
+buffer='claude '
+agents
+auth
+auto-mode
+daemon
+doctor
+gateway
+import-conversations
+install
+mcp
+plugin
+plugins
+project
+remote-control
+setup-token
+ultrareview
+update
+upgrade

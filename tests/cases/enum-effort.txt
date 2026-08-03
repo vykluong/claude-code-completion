@@ -1,0 +1,6 @@
+buffer='claude --effort '
+high
+low
+max
+medium
+xhigh

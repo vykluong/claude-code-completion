@@ -1,0 +1,16 @@
+buffer='claude remote-control -'
+--capacity
+--continue
+--create-session-in-dir
+--debug-file
+--help
+--name
+--no-create-session-in-dir
+--permission-mode
+--remote-control-session-name-prefix
+--session-id
+--spawn
+--verbose
+-c
+-h
+-v

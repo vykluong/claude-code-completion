@@ -1,0 +1,18 @@
+buffer='claude agents -'
+--add-dir
+--agent
+--all
+--allow-dangerously-skip-permissions
+--cwd
+--dangerously-skip-permissions
+--effort
+--help
+--json
+--mcp-config
+--model
+--permission-mode
+--plugin-dir
+--setting-sources
+--settings
+--strict-mcp-config
+-h

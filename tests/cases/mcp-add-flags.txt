@@ -1,0 +1,13 @@
+buffer='claude mcp add -'
+# mode: contains
+--callback-port
+--client-id
+--client-secret
+--env
+--header
+--scope
+--transport
+-H
+-e
+-s
+-t

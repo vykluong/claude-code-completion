@@ -1,0 +1,4 @@
+buffer='claude --output-format '
+json
+stream-json
+text

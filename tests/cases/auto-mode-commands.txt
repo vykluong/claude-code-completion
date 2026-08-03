@@ -1,0 +1,6 @@
+buffer='claude auto-mode '
+config
+critique
+defaults
+help
+reset

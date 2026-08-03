@@ -1,0 +1,6 @@
+buffer='claude daemon '
+logs
+run
+status
+stop
+uninstall

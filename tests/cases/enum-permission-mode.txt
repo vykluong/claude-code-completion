@@ -1,0 +1,7 @@
+buffer='claude --permission-mode '
+acceptEdits
+auto
+bypassPermissions
+dontAsk
+manual
+plan

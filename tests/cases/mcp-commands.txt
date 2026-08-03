@@ -1,0 +1,12 @@
+buffer='claude mcp '
+add
+add-from-claude-desktop
+add-json
+get
+help
+list
+login
+logout
+remove
+reset-project-choices
+serve

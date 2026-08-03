@@ -1,0 +1,5 @@
+buffer='claude mcp a'
+# double-tab
+add
+add-from-claude-desktop
+add-json

@@ -1,0 +1,19 @@
+buffer='claude plugin '
+autoremove
+details
+disable
+enable
+eval
+help
+i
+init
+install
+list
+marketplace
+new
+prune
+remove
+tag
+uninstall
+update
+validate

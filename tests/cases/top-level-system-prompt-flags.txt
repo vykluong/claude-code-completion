@@ -1,0 +1,4 @@
+buffer='claude --system-prompt'
+# mode: contains
+--system-prompt
+--system-prompt-file

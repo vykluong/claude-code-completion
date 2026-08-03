@@ -1,0 +1,3 @@
+buffer='claude auto-mode config -'
+--help
+-h

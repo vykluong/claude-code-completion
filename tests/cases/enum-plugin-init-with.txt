@@ -1,0 +1,8 @@
+buffer='claude plugin init x --with '
+agents
+channel
+hooks
+lsp
+mcp
+output-style
+skills
