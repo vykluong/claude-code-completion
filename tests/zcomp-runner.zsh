@@ -10,8 +10,18 @@ REPO=${0:A:h:h}
 WORK=$(mktemp -d)
 LOG=$WORK/cap.log
 mkdir -p $WORK/home
+# Complete from a private copy of the script: CI checkouts can be
+# group-writable, and compaudit strips such dirs from fpath even under
+# `compinit -u`, which would silently unregister _claude.
+mkdir -p $WORK/fns
+cp $REPO/src/_claude $WORK/fns/
+# Ubuntu's /etc/zsh/zshrc runs a bare `compinit` before ZDOTDIR/.zshrc; on CI
+# runners with group-writable system dirs it blocks on the interactive
+# "insecure directories" prompt, so the ZC> prompt never appears. Skipping the
+# global compinit is harmless on other platforms.
+print -r -- 'skip_global_compinit=1' > $WORK/home/.zshenv
 cat > $WORK/home/.zshrc <<EOF
-fpath=($REPO/src \$fpath)
+fpath=($WORK/fns \$fpath)
 autoload -U compinit
 compinit -u -d $WORK/home/zcompdump
 compadd() { local -a m; builtin compadd -O m "\$@" 2>/dev/null; (( \$#m )) && print -rl -- "\$m[@]" >> \$CAPLOG; builtin compadd "\$@"; }
