@@ -1,9 +1,13 @@
 #compdef claude
 
 # ZSH completion script for Claude Code CLI
-# Target: Claude Code CLI 2.1.217
+# Target: Claude Code CLI 2.1.220
 # Command/option tables generated against "claude --help" (and per-subcommand
-# --help output) on 2.1.217, captured 2026-07-22.
+# --help output) on 2.1.220, captured 2026-08-02.
+#
+# Policy: completions cover everything invokable, including commands and flags
+# that "--help" hides. Hidden entries are marked and were confirmed by probing
+# the installed binary, not read out of help text.
 
 _claude() {
   local curcontext="$curcontext" state line context
@@ -20,6 +24,10 @@ _claude() {
     '--allow-dangerously-skip-permissions[Enable bypassing all permission checks as an option]'
     '(--allowedTools --allowed-tools)'{--allowedTools,--allowed-tools}'[Comma or space-separated list of tool names to allow]:tools:'
     '--append-system-prompt[Append a system prompt to the default system prompt]:prompt:'
+    # Hidden: absent from "claude --help", but parsed. Probed 2026-08-02 on
+    # 2.1.220 -- rejects a missing path with "Append system prompt file not
+    # found", where an unknown flag would instead be "unknown option".
+    '--append-system-prompt-file[Append a system prompt from a file to the default system prompt]:path:_files'
     '--ax-screen-reader[Render screen-reader friendly output]'
     '(--bg --background)'{--bg,--background}'[Start the session as a background agent and return immediately]'
     '--bare[Minimal mode: skip hooks, LSP, plugin sync, attribution, and more]'
@@ -47,7 +55,9 @@ _claude() {
     '--json-schema[JSON Schema for structured output validation]:schema:'
     '--max-budget-usd[Maximum dollar amount to spend on API calls]:amount:'
     '*--mcp-config[Load MCP servers from JSON files or strings]:config:_files'
-    "--model[Model for the current session (alias or full name)]:model:(fable opus sonnet)"
+    # Aliases are the stable contract; the full names are best-effort and churn
+    # with releases. Any other string is still accepted -- the CLI validates it.
+    "--model[Model for the current session (alias or full name)]:model:(fable opus sonnet haiku claude-fable-5 claude-opus-5 claude-sonnet-5 claude-haiku-4-5-20251001)"
     '(-n --name)'{-n,--name}'[Set a display name for this session]:name:'
     '--no-session-persistence[Disable session persistence (only works with --print)]'
     '--output-format[Output format (only works with --print)]:format:(text json stream-json)'
@@ -66,7 +76,9 @@ _claude() {
     '--settings[Path to a settings JSON file or a JSON string]:file or json:_files'
     '--strict-mcp-config[Only use MCP servers from --mcp-config]'
     '--system-prompt[System prompt to use for the session]:prompt:'
-    '--tmux[Create a tmux session for the worktree (requires --worktree)]'
+    # Hidden, same as --append-system-prompt-file above.
+    '--system-prompt-file[Read the system prompt for the session from a file]:path:_files'
+    '--tmux=-[Create a tmux session for the worktree (requires --worktree; =classic for traditional tmux)]::mode:(classic)'
     '--tools[Specify the list of available tools from the built-in set]:tools:'
     '--verbose[Override verbose mode setting from config]'
     '(-v --version)'{-v,--version}'[Output the version number]'
@@ -250,7 +262,7 @@ _claude_agents() {
     '--effort[Default effort level for dispatched sessions]:level:(low medium high xhigh max)' \
     '--json[Print active sessions as a JSON array and exit]' \
     '*--mcp-config[MCP server configuration to apply to dispatched sessions]:config:_files' \
-    '--model[Default model for dispatched sessions]:model:' \
+    '--model[Default model for dispatched sessions]:model:(fable opus sonnet haiku claude-fable-5 claude-opus-5 claude-sonnet-5 claude-haiku-4-5-20251001)' \
     '--permission-mode[Default permission mode for dispatched sessions]:mode:(acceptEdits auto bypassPermissions manual dontAsk plan)' \
     '*--plugin-dir[Load plugins from specified directory]:path:_files -/' \
     '--setting-sources[Comma-separated list of setting sources to load]:sources:' \
@@ -271,6 +283,7 @@ _claude_auth() {
     sub)
       case $words[1] in
         login)  _claude_auth_login ;;
+        logout) _claude_auth_logout ;;
         status) _claude_auth_status ;;
       esac
       ;;
@@ -297,6 +310,10 @@ _claude_auth_login() {
     '(-h --help)'{-h,--help}'[Display help for command]'
 }
 
+_claude_auth_logout() {
+  _arguments '(-h --help)'{-h,--help}'[Display help for command]'
+}
+
 _claude_auth_status() {
   _arguments \
     '--json[Output as JSON (default)]' \
@@ -315,9 +332,12 @@ _claude_auto_mode() {
   case $state in
     sub)
       case $words[1] in
+        config)   _claude_auto_mode_config ;;
         critique) _claude_auto_mode_critique ;;
         defaults) _claude_auto_mode_defaults ;;
         reset)    _claude_auto_mode_reset ;;
+        # 'help' takes an optional command name and falls back to the parent
+        # help; it is intentionally bare here and in the other dispatchers.
       esac
       ;;
   esac
@@ -333,6 +353,10 @@ _claude_auto_mode_commands() {
     'help:Display help for command'
   )
   _describe -t auto-mode-commands 'auto-mode command' c
+}
+
+_claude_auto_mode_config() {
+  _arguments '(-h --help)'{-h,--help}'[Display help for command]'
 }
 
 _claude_auto_mode_critique() {
